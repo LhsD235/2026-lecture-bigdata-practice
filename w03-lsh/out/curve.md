@@ -60,9 +60,10 @@ The documents are synthetic, so document size and similarity distributions may d
 | OS / environment | WSL2 Ubuntu |
 | WSL-visible RAM | 7.5 GiB |
 | WSL swap | 2.0 GiB |
-| Other applications running | VS Code and CHrome(about 2-3 browser windows) |
+| Other applications running | VS Code and Chrome (about 2-3 browser windows) |
 
-The memory above is what WSL reported, not necessarily all physical RAM installed in the laptop. I did not record other running applications, so I cannot claim that this was an otherwise idle machine. This missing detail limits how precisely another person could reproduce my timings.
+The memory above is what WSL reported, not necessarily all physical RAM installed in the laptop. VS Code and approximately 2–3 Chrome windows were open during the experiment. Other background processes were not systematically
+recorded, so I cannot claim that the machine was otherwise idle. This missing detail limits how precisely another person could reproduce my timings.
 
 ## 8. Conclusion
 

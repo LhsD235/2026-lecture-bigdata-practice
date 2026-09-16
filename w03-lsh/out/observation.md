@@ -14,7 +14,7 @@ I tested **250, 500, 1,000, 2,000, and 4,000** documents (five sizes across a 16
 
 Brute Force was faster at 500 documents (**0.90 s** versus **1.26 s**), while LSH was faster at 1,000 (**1.52 s** versus **3.54 s**). Thus, my measured crossover lies **between 500 and 1,000 documents**; I did not measure its exact location. The successive Brute Force time increases when doubling the dataset were **4.29×, 3.93×, 4.08×, and 3.79×**, consistent with quadratic growth.
 
-At 4,000 documents, waiting time became the limiting factor: Brute Force took **54.80 s** and **7,998,000 comparisons**, while LSH took **3.04 s** and **229 comparisons**. I stopped at that size rather than claiming results for larger datasets. The experiment ran on an **Intel Core i7-1360P in WSL2 Ubuntu**, with **7.5 GiB of WSL-visible memory**; whether other applications were running was not recorded. Full results, including traced peak memory, are in `out/curve.md` and `out/crossover.json`.
+At 4,000 documents, waiting time became the limiting factor: Brute Force took **54.80 s** and **7,998,000 comparisons**, while LSH took **3.04 s** and **229 comparisons**. I stopped at that size rather than claiming results for larger datasets. The experiment ran on an **Intel Core i7-1360P in WSL2 Ubuntu**, with **7.5 GiB of WSL-visible memory**; VS Code and approximately 2–3 Chrome windows were open during the experiment, but other background processes were not systematically recorded. Full results, including traced peak memory, are in `out/curve.md` and `out/crossover.json`.
 
 ## Task 3: Finding Similar Pairs with Fewer Comparisons
 
