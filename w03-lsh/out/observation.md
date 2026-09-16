@@ -2,189 +2,40 @@
 
 ## Task 1: MinHash and LSH
 
-I implemented Jaccard similarity, MinHash signature generation,
-and LSH candidate selection.
+I implemented Jaccard similarity, MinHash signatures, and LSH candidate generation. My MinHash function scans each matrix row once and updates every column containing that row; it does not scan the entire matrix separately for each column. This matters when the matrix is too large to revisit repeatedly.
 
-For MinHash, I used a row-based approach. The program scans each
-matrix row once and updates the signatures of the columns that
-contain that row.
+In `lsh_candidates()`, I raise a `ValueError` if the signature length is not divisible by the number of bands. This keeps all bands the same size without silently dropping any signature entries. I store candidate pairs in a set to avoid duplicates.
 
-This avoids scanning the entire matrix separately for every
-column.
-
-I also observed that MinHash is an approximation. For S1 and S4,
-the true Jaccard similarity was 2/3, but their two-position
-MinHash signatures matched completely, giving an estimate of 1.0.
-
-This difference occurred because only two hash functions were
-used. Using more hash functions can generally provide a more
-stable similarity estimate.
-
-### Banding Implementation
-
-In `lsh_candidates()`, I divided each MinHash signature into bands
-of equal size.
-
-If the signature length was not divisible by the number of bands,
-my implementation raised a ValueError.
-
-I chose this approach to avoid silently discarding signature values
-and to ensure that every band contains the same number of rows.
-
-Document pairs that matched in at least one band were added to a
-candidate set. Using a set prevented duplicate pairs from being stored.
+For S1 and S4, the true Jaccard similarity is **2/3**, but the two-hash MinHash estimate is **1.0** because both signature positions agree. More hash functions could reduce the estimate's variance, at the cost of extra hashing, memory, and computation.
 
 ## Task 2: Finding the Crossover
 
-I compared Brute Force and LSH using five dataset sizes,
-from 250 to 4,000 documents.
+I tested **250, 500, 1,000, 2,000, and 4,000** documents (five sizes across a 16× range). Because one call to `bench.build()` produces 2,120 documents, I modified the Task 2 measurement script to generate additional batches with different seeds when needed. Dataset generation was excluded from the timed section.
 
-Brute Force was faster at 500 documents (0.90s vs. 1.26s),
-but LSH became faster at 1,000 documents (1.52s vs. 3.54s).
-Therefore, the crossover on my machine lies between
-500 and 1,000 documents.
+Brute Force was faster at 500 documents (**0.90 s** versus **1.26 s**), while LSH was faster at 1,000 (**1.52 s** versus **3.54 s**). Thus, my measured crossover lies **between 500 and 1,000 documents**; I did not measure its exact location. The successive Brute Force time increases when doubling the dataset were **4.29×, 3.93×, 4.08×, and 3.79×**, consistent with quadratic growth.
 
-At 4,000 documents, Brute Force took 54.80 seconds and
-performed 7,998,000 similarity comparisons. LSH took
-3.04 seconds and performed only 229 comparisons.
-
-I stopped at 4,000 documents because Brute Force took
-nearly one minute. The results show that LSH's preprocessing
-cost matters for small datasets, but reducing similarity
-comparisons becomes more beneficial as the dataset grows.
-
-Detailed measurements are recorded in out/curve.md and
-out/crossover.json.
+At 4,000 documents, waiting time became the limiting factor: Brute Force took **54.80 s** and **7,998,000 comparisons**, while LSH took **3.04 s** and **229 comparisons**. I stopped at that size rather than claiming results for larger datasets. The experiment ran on an **Intel Core i7-1360P in WSL2 Ubuntu**, with **7.5 GiB of WSL-visible memory**; whether other applications were running was not recorded. Full results, including traced peak memory, are in `out/curve.md` and `out/crossover.json`.
 
 ## Task 3: Finding Similar Pairs with Fewer Comparisons
 
-### Implementation and Parameters
+My `YourFinder` builds **120-value MinHash signatures**, divides them into **30 bands of 4 rows**, and calls the exact similarity function only for pairs sharing at least one band. It uses the supplied `similarity()` function for final filtering at the **0.6** threshold and a set to avoid duplicate candidate comparisons.
 
-I implemented `YourFinder` using MinHash and LSH to reduce the
-number of similarity comparisons.
+### S-curve calculation and parameter choice
 
-My implementation uses the following parameters:
+For similarity `s`, `b` bands, and `r` rows per band, the approximate probability of becoming a candidate is:
 
-- Similarity threshold: 0.6
-- Number of hash functions: 120
-- Number of bands: 30
-- Rows per band: 4
-
-First, the program generates a 120-value MinHash signature for
-each document.
-
-Next, it divides each signature into 30 bands, with 4 values
-per band. Documents that have identical values in at least
-one band are selected as candidate pairs.
-
-Finally, the program calculates the actual Jaccard similarity
-only for these candidate pairs and returns pairs whose
-similarity is at least 0.6.
-
-I used a set to prevent duplicate candidate pairs from being
-compared multiple times.
-
-### Benchmark Results
-
-I evaluated my implementation using `python3 bench.py --yours`.
-
-The benchmark contained 2,120 documents and 121 truly similar
-document pairs.
-
-| Metric | Brute Force | My LSH Implementation |
-|---|---:|---:|
-| Similarity comparisons | 2,246,140 | 123 |
-| Runtime | 7.73s | 0.49s |
-| Recall | 100% | 100% |
-| Precision | 100% | 100% |
-
-My implementation reduced the number of similarity comparisons
-from 2,246,140 to 123, avoiding approximately 99.99% of the
-comparisons.
-
-The algorithm checked 123 candidate pairs and returned the
-121 pairs that met the similarity threshold.
-
-It achieved 100% recall and precision in this benchmark,
-meaning that it did not miss any truly similar pairs or
-return any incorrect pairs in this test.
-
-However, this result does not guarantee perfect recall on
-every dataset, because LSH can miss pairs during candidate
-selection.
-
-### Parameter Selection and S-Curve
-
-I used 120 hash functions and divided each signature into 30 bands
-with 4 rows per band.
-
-The approximate probability that two documents with similarity s
-become a candidate pair is:
-
+```text
 P(candidate) = 1 - (1 - s^r)^b
+```
 
-where:
-- s = Jaccard similarity
-- r = number of rows per band
-- b = number of bands
+With `b = 30` and `r = 4`, the approximate transition point is `(1/30)^(1/4) ≈ 0.427`, below the target similarity of `0.6`. At `s = 0.6`, the approximate candidate probability is `1 - (1 - 0.6^4)^30 ≈ 0.984`. I placed the transition below the target to favor recall, accepting some extra candidates. These are theoretical approximations; actual recall was measured with the benchmark.
 
-With my parameters, the formula becomes:
+### Benchmark and banding trade-off
 
-P(candidate) = 1 - (1 - s^4)^30
+The fixed-seed benchmark had **2,120 documents** and **121 truly similar pairs**. Brute Force made **2,246,140** similarity comparisons; my original configuration made **123**, with **100% recall** and **100% precision**. The saved `out/bench.txt` recorded **7.73 s** for Brute Force and **0.49 s** for LSH. In this run, all 121 true pairs were returned, and two additional candidates were rejected by the exact similarity check. Perfect recall here does not guarantee perfect recall on other datasets.
 
-The approximate S-curve threshold is:
+I then kept 120 hashes but changed to **15 bands of 8 rows**. The approximate transition moved to `(1/15)^(1/8) ≈ 0.713`, above the target of 0.6. Comparisons dropped from **123 to 83**, but recall fell from **100% to 68.6%**: the modified configuration found only 83 of the 121 true pairs, missing 38. I restored **30 bands × 4 rows**, since reducing comparisons is not useful here if it loses so many real pairs.
 
-t = (1 / b)^(1 / r)
-  = (1 / 30)^(1 / 4)
-  ≈ 0.427
+### When hashing overhead matters
 
-My target similarity threshold is 0.6, which is above this
-approximate S-curve threshold.
-
-At s = 0.6, the theoretical candidate probability is approximately:
-
-P(candidate) = 1 - (1 - 0.6^4)^30
-             ≈ 0.984
-
-I chose these parameters to make documents near the target
-similarity threshold likely to become candidates.
-
-This configuration favors recall, although it can also produce
-additional candidate pairs that must be filtered using the
-actual similarity function.
-
-The probability formula is an approximation based on the usual
-MinHash and LSH assumptions. Actual recall must be verified
-through experiments.
-
-### Banding Trade-off Experiment
-
-I changed the number of bands from 30 to 15 while keeping
-the total number of hash functions at 120.
-
-| Parameter | Original | Modified |
-|---|---:|---:|
-| Hash functions | 120 | 120 |
-| Bands | 30 | 15 |
-| Rows per band | 4 | 8 |
-| Similarity comparisons | 123 | 83 |
-| Recall | 100% | 68.6% |
-| Precision | 100% | 100% |
-
-With 15 bands and 8 rows per band, the number of comparisons
-decreased from 123 to 83. However, recall dropped from
-100% to 68.6%.
-
-The benchmark contained 121 truly similar pairs. The modified
-configuration found only 83 of them and missed 38 pairs.
-
-This happened because the modified configuration required
-8 signature values to match within a band instead of 4,
-making candidate selection more selective.
-
-The experiment showed that reducing comparisons too aggressively
-can cause LSH to miss genuinely similar pairs.
-
-I restored the original configuration of 30 bands and 4 rows
-per band because it achieved 100% recall in the benchmark
-while still using only 123 similarity comparisons.
+The benchmark charges calls to `similarity()` but does not count signature generation or bucketing as comparisons. Those operations still consume time and memory. In Task 2, LSH was slower at 250 and 500 documents despite making far fewer similarity comparisons; even at 4,000 documents, its preprocessing and candidate search contributed to a total runtime of **3.04 s**. Ignoring hashing is therefore a poor approximation when preprocessing dominates—for example, with small datasets, large shingle sets, or many hash functions. The actual crossover depends on the workload and machine rather than a universal document count.
