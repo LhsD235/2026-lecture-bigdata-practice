@@ -18,7 +18,7 @@ and the harness checks you against it.
 """
 import argparse
 
-# §3.3.5. Rows are elements 0..4, columns are the sets S1..S4.
+# §3.3.5. Rows are elements 0..4, columns are the sets S1..S4.(예제 행렬)
 BOOK = [[1, 0, 0, 1],
         [0, 0, 1, 0],
         [0, 1, 0, 1],
@@ -27,40 +27,95 @@ BOOK = [[1, 0, 0, 1],
 # The two hash functions the textbook uses on the row numbers.
 BOOK_HASHES = [lambda r: (r + 1) % 5, lambda r: (3 * r + 1) % 5]
 
-
+#Jaccard Similarity: 두 집합에서의 교집합 / 합집합
 def jaccard(a, b):
     """|a and b| / |a or b|. Empty union is 0, not an error."""
-    raise NotImplementedError("jaccard similarity")
+    union = a | b
 
+    #에러를 발생하는게 아님
+    if not union:
+        return 0
+
+    intersection = a & b
+    return len(intersection) / len(union)
 
 def minhash_signatures(columns, hashes, n_rows):
     """Build the signature matrix, one pass over the rows.
 
     `columns` is [set_of_row_numbers, ...], one entry per document.
     Return [[sig for each hash] for each column].
-
-    The algorithm in §3.3.5 walks each row **once** and updates the signature
-    of every column that has a 1 in it:
-
-        sig[h][c] = min(sig[h][c], h(r))
-
-    Doing it that way is the point. If you sort or re-scan per column you have
-    written something correct that does not survive a dataset that does not fit
-    in memory, and not fitting in memory is what this course is about.
     """
-    raise NotImplementedError("signature matrix")
+
+    # 각 column마다 hash 개수만큼 signature 공간을 만든다.
+    # 처음에는 어떤 값이 최소인지 모르므로 무한대로 초기화한다.
+    signatures = [
+        [float("inf")] * len(hashes)
+        for _ in columns
+    ]
+
+    # row를 딱 한 번씩 순회.
+    for r in range(n_rows):
+
+        # 현재 row의 hash 값들을 한 번만 계산
+        hash_values = [h(r) for h in hashes]
+
+        # 현재 row가 들어 있는 column을 찾는다.
+        for c, column in enumerate(columns):
+
+            if r in column:
+
+                # 해당 column의 각 hash signature 갱신
+                for h_idx, hash_value in enumerate(hash_values):
+                    signatures[c][h_idx] = min(
+                        signatures[c][h_idx],
+                        hash_value
+                    )
+
+    return signatures
 
 
 def lsh_candidates(signatures, bands):
     """Split each signature into `bands` bands and hash each band.
 
-    Two columns are candidates if they land in the same bucket for **at least
-    one** band. Return {(i, j), ...} with i < j.
-
-    The signature length must divide evenly by `bands`, or you have to decide
-    what to do with the remainder. Say what you decided.
+    Two columns are candidates if they land in the same bucket for at least
+    one band. Return {(i, j), ...} with i < j.
     """
-    raise NotImplementedError("LSH candidate pairs")
+
+    if not signatures:
+        return set()
+
+    sig_len = len(signatures[0])
+
+    # signature 길이가 bands로 정확히 나누어지지 않으면 오류
+    if sig_len % bands != 0:
+        raise ValueError("signature length must divide evenly by bands")
+
+    rows_per_band = sig_len // bands
+    candidates = set()
+
+    # band 하나씩 처리
+    for band_idx in range(bands):
+        buckets = {}
+
+        start = band_idx * rows_per_band
+        end = start + rows_per_band
+
+        # 각 document(column)의 현재 band를 bucket에 넣기
+        for doc_idx, signature in enumerate(signatures):
+            band = tuple(signature[start:end])
+
+            if band not in buckets:
+                buckets[band] = []
+
+            buckets[band].append(doc_idx)
+
+        # 같은 bucket에 들어간 document들은 candidate
+        for docs in buckets.values():
+            for i in range(len(docs)):
+                for j in range(i + 1, len(docs)):
+                    candidates.add((docs[i], docs[j]))
+
+    return candidates
 
 
 # ------------------------------------------------------------------- harness

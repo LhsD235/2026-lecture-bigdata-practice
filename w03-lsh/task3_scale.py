@@ -16,7 +16,7 @@ The harness counts every call you make to `similarity()`. That is your score.
 It also checks **recall** - which of the truly similar pairs you found. Skipping
 comparisons is easy; skipping comparisons without losing the pairs is the task.
 """
-
+import random
 
 class BruteForce:
     """Correct, and quadratic."""
@@ -35,33 +35,99 @@ class BruteForce:
 
 
 class YourFinder:
-    """Your near-duplicate finder.
-
-        __init__(threshold)
-        find(docs, similarity) -> {(i, j), ...}
-
-    `similarity(a, b)` is the only way to compare two documents, and every call
-    is counted. Everything else - signatures, banding, bucketing - is free, in
-    the sense that the harness does not charge you for it. That is deliberate:
-    it is also roughly true at scale, where the comparison is the expensive
-    part and the hashing is linear.
-
-    Two knobs decide everything:
-
-        the number of hashes in a signature
-        how many bands you split it into
-
-    §3.4.2 gives you the relationship between those and the probability that a
-    pair at similarity s becomes a candidate. It is an S-curve, and where its
-    step sits is something you choose. Choose it on purpose and be able to say
-    why in observation.md - a threshold of 0.8 does not mean bands should be
-    anything in particular until you have done the arithmetic.
-
-    You may reuse your Task 1 code.
-    """
+    """LSH-based near-duplicate finder."""
 
     def __init__(self, threshold):
-        raise NotImplementedError("write your finder")
+        self.threshold = threshold
+
+        # 120 hashes = 30 bands * 4 rows per band
+        self.num_hashes = 120
+        self.bands = 30
+        self.rows_per_band = self.num_hashes // self.bands
+
+        # Hash function:
+        # h(x) = (a*x + b) % prime
+        self.prime = 4_294_967_311
+
+        # 같은 실행마다 같은 hash 함수들이 만들어지도록 고정 seed 사용
+        rng = random.Random(2026)
+
+        self.hash_params = [
+            (
+                rng.randrange(1, self.prime),
+                rng.randrange(0, self.prime)
+            )
+            for _ in range(self.num_hashes)
+        ]
 
     def find(self, docs, similarity):
-        raise NotImplementedError
+        if not docs:
+            return set()
+
+        # -------------------------------------------------
+        # 1. 등장하는 모든 shingle의 hash 값을 미리 계산
+        # -------------------------------------------------
+        universe = set()
+
+        for doc in docs:
+            universe.update(doc)
+
+        hashed = {}
+
+        for x in universe:
+            hashed[x] = [
+                (a * x + b) % self.prime
+                for a, b in self.hash_params
+            ]
+
+        # -------------------------------------------------
+        # 2. 각 document의 MinHash signature 생성
+        # -------------------------------------------------
+        signatures = []
+
+        for doc in docs:
+            sig = [self.prime] * self.num_hashes
+
+            for x in doc:
+                hash_values = hashed[x]
+
+                for h_idx, hash_value in enumerate(hash_values):
+                    if hash_value < sig[h_idx]:
+                        sig[h_idx] = hash_value
+
+            signatures.append(sig)
+
+        # -------------------------------------------------
+        # 3. Banding → candidate pair 생성
+        # -------------------------------------------------
+        candidates = set()
+
+        for band_idx in range(self.bands):
+            buckets = {}
+
+            start = band_idx * self.rows_per_band
+            end = start + self.rows_per_band
+
+            for doc_idx, sig in enumerate(signatures):
+
+                # 현재 band의 signature 값
+                band = tuple(sig[start:end])
+
+                bucket = buckets.setdefault(band, [])
+
+                # 이미 같은 bucket에 들어와 있는 문서와 candidate 생성
+                for other_idx in bucket:
+                    candidates.add((other_idx, doc_idx))
+
+                bucket.append(doc_idx)
+
+        # -------------------------------------------------
+        # 4. Candidate에 대해서만 실제 Jaccard similarity 계산
+        # -------------------------------------------------
+        out = set()
+
+        for i, j in candidates:
+            if similarity(docs[i], docs[j]) >= self.threshold:
+                out.add((i, j))
+
+        return out
