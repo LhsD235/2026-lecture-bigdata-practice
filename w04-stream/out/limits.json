@@ -1,0 +1,49 @@
+{
+  "runs": [
+    {
+      "n": 100000,
+      "true_distinct": 36702,
+      "exact_s": 0.08677116699982435,
+      "exact_peak_bytes": 3925492,
+      "fm_estimate": 49152.0,
+      "fm_s": 8.651248742000462,
+      "fm_peak_bytes": 13226,
+      "fm_ratio": 1.3392185711950302
+    },
+    {
+      "n": 400000,
+      "true_distinct": 146970,
+      "exact_s": 0.39913726699887775,
+      "exact_peak_bytes": 11591174,
+      "fm_estimate": 196608.0,
+      "fm_s": 35.17804965399773,
+      "fm_peak_bytes": 10354,
+      "fm_ratio": 1.33774239640743
+    },
+    {
+      "n": 1600000,
+      "true_distinct": 587625,
+      "exact_s": 1.5992132100000163,
+      "exact_peak_bytes": 46647456,
+      "fm_estimate": 1048576.0,
+      "fm_s": 141.52652936699815,
+      "fm_peak_bytes": 10290,
+      "fm_ratio": 1.7844305466921933
+    },
+    {
+      "n": 200000,
+      "true_distinct": 73410,
+      "exact_s": 0.18183744300040416,
+      "exact_peak_bytes": 5760955,
+      "fm_estimate": 98304.0,
+      "fm_s": 17.421817761998682,
+      "fm_peak_bytes": 14046,
+      "fm_ratio": 1.3391091131998365
+    }
+  ],
+  "machine": {
+    "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "processor": "x86_64",
+    "python": "3.14.4"
+  }
+}

@@ -13,73 +13,156 @@ approximating.
 
     python3 task1_sketches.py --verify
 """
-import argparse, random
+import argparse, random, hashlib, math, struct
 
 
 class BloomFilter:
     """Membership, with one-sided error.
 
-    A Bloom filter never says "no" about something you inserted. It sometimes
-    says "yes" about something you did not. That asymmetry is the entire design
-    and it is why it is useful for "have I seen this before" and useless for
-    "is this definitely in the set".
-
     `m` bits, `k` hash functions.
     """
 
     def __init__(self, m, k, seed=246):
-        raise NotImplementedError("write the Bloom filter")
+        self.m = m
+        self.k = k
+        self.seed = seed
+
+        # m개의 bit를 저장할 공간
+        # byte 1개 = 8 bits
+        self.bits = bytearray((m + 7) // 8)
+
+    def _indexes(self, item):
+        """item에 대해 k개의 bit 위치를 만든다."""
+        item_bytes = str(item).encode("utf-8")
+
+        for i in range(self.k):
+            data = (
+                str(self.seed).encode("utf-8")
+                + b":"
+                + str(i).encode("utf-8")
+                + b":"
+                + item_bytes
+            )
+
+            digest = hashlib.sha256(data).digest()
+            value = int.from_bytes(digest[:8], "big")
+
+            yield value % self.m
 
     def add(self, item):
-        raise NotImplementedError
+        """item의 k개 위치를 모두 1로 만든다."""
+        for index in self._indexes(item):
+            byte_index = index // 8
+            bit_index = index % 8
+
+            self.bits[byte_index] |= (1 << bit_index)
 
     def __contains__(self, item):
-        raise NotImplementedError
+        """k개 위치가 모두 1이면 '있을 수도 있다'."""
+        for index in self._indexes(item):
+            byte_index = index // 8
+            bit_index = index % 8
+
+            if not (self.bits[byte_index] & (1 << bit_index)):
+                return False
+
+        return True
 
     def expected_fp_rate(self, n_inserted):
-        """The textbook's predicted false-positive rate after n insertions.
-
-        §4.4.2 derives it. Return the number, do not measure it - the harness
-        measures separately and compares the two.
-        """
-        raise NotImplementedError
+        """이론적인 false-positive 확률."""
+        return (
+            1 - math.exp(-self.k * n_inserted / self.m)
+        ) ** self.k
 
 
 def flajolet_martin(stream, n_hashes=64, seed=246):
-    """Estimate how many DISTINCT items went past, in almost no memory.
+    """Estimate the number of distinct items using Flajolet-Martin."""
 
-    §4.5. Hash each item, count trailing zeros in the hash, keep the maximum.
-    A maximum of R suggests about 2^R distinct items, because seeing R trailing
-    zeros is a 1-in-2^R event.
+    max_zeros = [0] * n_hashes
 
-    One hash gives an estimate with enormous variance, so you use many and
-    combine them. How you combine them matters a great deal:
+    seed_bytes = f"{seed}:".encode("utf-8")
 
-      * averaging 2^R directly is dominated by whichever hash got lucky - the
-        values are exponential, so one outlier swamps the rest
-      * the median is robust but can only ever be a power of two
-      * §4.5.3 suggests grouping, and combining twice
+    # hash 하나당 64 bits = 8 bytes
+    digest_size = n_hashes * 8
 
-    The harness accepts anything **within a factor of two** of the truth. That is
-    not a generous tolerance, it is an honest one: this method really is that
-    crude, and HyperLogLog exists because of it. Getting inside a factor of two
-    reliably is the requirement; getting closer than that is not expected here.
+    # unpack 형식: n_hashes개의 unsigned 64-bit integer
+    unpack_format = ">" + ("Q" * n_hashes)
 
-    Return your estimate as a float.
-    """
-    raise NotImplementedError("write Flajolet-Martin")
+    # stream을 딱 한 번 순회
+    for item in stream:
+        item_bytes = str(item).encode("utf-8")
 
+        # 한 번의 SHAKE 호출로 n_hashes개의 64-bit hash 값 생성
+        digest = hashlib.shake_256(
+            seed_bytes + item_bytes
+        ).digest(digest_size)
+
+        hash_values = struct.unpack(
+            unpack_format,
+            digest
+        )
+
+        for i, value in enumerate(hash_values):
+
+            if value == 0:
+                zeros = 64
+            else:
+                zeros = (
+                    value & -value
+                ).bit_length() - 1
+
+            if zeros > max_zeros[i]:
+                max_zeros[i] = zeros
+
+    # 각 hash의 FM estimate
+    estimates = [
+        2 ** r
+        for r in max_zeros
+    ]
+
+    # 두 개씩 그룹화해서 평균
+    group_size = 2
+    group_estimates = []
+
+    for start in range(0, n_hashes, group_size):
+        group = estimates[start:start + group_size]
+
+        group_estimates.append(
+            sum(group) / len(group)
+        )
+
+    # 그룹 평균들의 median
+    group_estimates.sort()
+
+    middle = len(group_estimates) // 2
+
+    if len(group_estimates) % 2 == 1:
+        estimate = group_estimates[middle]
+
+    else:
+        estimate = (
+            group_estimates[middle - 1]
+            + group_estimates[middle]
+        ) / 2
+
+    return float(estimate)
 
 def reservoir_sample(stream, k, seed=246):
-    """Keep k items uniformly at random from a stream of unknown length.
+    """Keep k items uniformly at random from a stream."""
 
-    §4.3. Every item that went past must end up with the same probability k/n
-    of being in your sample, and you only ever hold k of them.
+    rng = random.Random(seed)
+    reservoir = []
 
-    Return a list of k items (or fewer if the stream was shorter).
-    """
-    raise NotImplementedError("write reservoir sampling")
+    for i, item in enumerate(stream):
+        if i < k:
+            reservoir.append(item)
+        else:
+            j = rng.randrange(i + 1)
 
+            if j < k:
+                reservoir[j] = item
+
+    return reservoir
 
 # ------------------------------------------------------------------- harness
 def verify():
