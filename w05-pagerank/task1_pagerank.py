@@ -41,7 +41,50 @@ def pagerank(graph, beta=0.85, iterations=100, tol=1e-10):
     you should call it converged. Return the ranks, and set `pagerank.iterations`
     to how many you actually used, because Task 2 measures that.
     """
-    raise NotImplementedError("implement PageRank")
+    if not 0.0 <= beta <= 1.0:
+        raise ValueError("beta must be between 0 and 1")
+    if iterations < 0:
+        raise ValueError("iterations must be non-negative")
+    if tol < 0:
+        raise ValueError("tol must be non-negative")
+
+    nodes = list(graph)
+    n = len(nodes)
+    if n == 0:
+        pagerank.iterations = 0
+        return {}
+
+    node_set = set(nodes)
+    for source, outs in graph.items():
+        unknown = set(outs) - node_set
+        if unknown:
+            raise ValueError(f"{source!r} links to unknown nodes: {sorted(unknown)!r}")
+
+    ranks = {node: 1.0 / n for node in nodes}
+    pagerank.iterations = 0
+
+    for step in range(1, iterations + 1):
+        # A dangling surfer has no link to follow. Treat that event as another
+        # uniform jump, so its probability mass is conserved.
+        dangling_rank = sum(ranks[node] for node in nodes if not graph[node])
+        uniform = ((1.0 - beta) + beta * dangling_rank) / n
+        new_ranks = {node: uniform for node in nodes}
+
+        for source in nodes:
+            outs = graph[source]
+            if not outs:
+                continue
+            contribution = beta * ranks[source] / len(outs)
+            for target in outs:
+                new_ranks[target] += contribution
+
+        delta = sum(abs(new_ranks[node] - ranks[node]) for node in nodes)
+        ranks = new_ranks
+        pagerank.iterations = step
+        if delta < tol:
+            break
+
+    return ranks
 
 
 def pagerank_no_teleport(graph, iterations=100):
@@ -50,7 +93,33 @@ def pagerank_no_teleport(graph, iterations=100):
     It exists so you can watch both failures happen rather than take them on
     trust. The harness checks that it really does fail.
     """
-    raise NotImplementedError("implement the broken version")
+    if iterations < 0:
+        raise ValueError("iterations must be non-negative")
+
+    nodes = list(graph)
+    n = len(nodes)
+    if n == 0:
+        return {}
+
+    node_set = set(nodes)
+    for source, outs in graph.items():
+        unknown = set(outs) - node_set
+        if unknown:
+            raise ValueError(f"{source!r} links to unknown nodes: {sorted(unknown)!r}")
+
+    ranks = {node: 1.0 / n for node in nodes}
+    for _ in range(iterations):
+        new_ranks = {node: 0.0 for node in nodes}
+        for source in nodes:
+            outs = graph[source]
+            if not outs:
+                # This is deliberately broken: rank at a dead end disappears.
+                continue
+            contribution = ranks[source] / len(outs)
+            for target in outs:
+                new_ranks[target] += contribution
+        ranks = new_ranks
+    return ranks
 
 
 # ------------------------------------------------------------------- harness

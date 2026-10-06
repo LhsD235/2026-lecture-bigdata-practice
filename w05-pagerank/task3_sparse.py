@@ -86,10 +86,58 @@ class YourPageRank:
     """
 
     def __init__(self, beta=0.85, tol=1e-10, max_iter=100):
-        raise NotImplementedError("write your PageRank")
+        if not 0.0 <= beta <= 1.0:
+            raise ValueError("beta must be between 0 and 1")
+        if tol < 0:
+            raise ValueError("tol must be non-negative")
+        if max_iter < 0:
+            raise ValueError("max_iter must be non-negative")
+        self.beta, self.tol, self.max_iter = beta, tol, max_iter
+        self.iterations = 0
+        self._memory_floats = 0
 
     def run(self, graph):
-        raise NotImplementedError
+        nodes = list(graph)
+        n = len(nodes)
+        if n == 0:
+            self.iterations = 0
+            self._memory_floats = 0
+            return {}
+
+        node_set = set(nodes)
+        for source, outs in graph.items():
+            unknown = set(outs) - node_set
+            if unknown:
+                raise ValueError(
+                    f"{source!r} links to unknown nodes: {sorted(unknown)!r}"
+                )
+
+        # The graph is already sparse. Keep it as an adjacency list and hold
+        # only the current and next rank vector (2n floating-point values).
+        ranks = {node: 1.0 / n for node in nodes}
+        self._memory_floats = 2 * n
+        self.iterations = 0
+
+        for step in range(1, self.max_iter + 1):
+            dangling_rank = sum(ranks[node] for node in nodes if not graph[node])
+            uniform = ((1.0 - self.beta) + self.beta * dangling_rank) / n
+            new_ranks = {node: uniform for node in nodes}
+
+            for source in nodes:
+                outs = graph[source]
+                if not outs:
+                    continue
+                contribution = self.beta * ranks[source] / len(outs)
+                for target in outs:
+                    new_ranks[target] += contribution
+
+            delta = sum(abs(new_ranks[node] - ranks[node]) for node in nodes)
+            ranks = new_ranks
+            self.iterations = step
+            if delta < self.tol:
+                break
+
+        return ranks
 
     def memory_floats(self):
-        raise NotImplementedError
+        return self._memory_floats
